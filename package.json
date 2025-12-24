@@ -1,0 +1,25 @@
+{
+  "name": "turnstile-solver-api",
+  "version": "1.0.0",
+  "description": "Cloudflare Turnstile Solver API using puppeteer-real-browser",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "docker:build": "docker build -t turnstile-solver .",
+    "docker:run": "docker run -p 3000:3000 turnstile-solver"
+  },
+  "keywords": ["turnstile", "captcha", "cloudflare", "puppeteer", "bypass"],
+  "author": "Xeno",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "puppeteer-real-browser": "^1.5.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
