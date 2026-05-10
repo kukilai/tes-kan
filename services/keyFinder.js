@@ -33,9 +33,14 @@ class KeyFinder {
       });
 
       const frameElement = await page.waitForSelector('iframe[src]', { timeout: 30000 });
-      const frame        = await frameElement.contentFrame();
-      await frame.waitForSelector('button#generateButtonEl', { timeout: 30000 });
-      await frame.click('button#generateButtonEl');
+      await page.waitForFunction(() => {
+        return !!document.querySelector('iframe[src]')
+          ?.contentDocument?.querySelector('button#generateButtonEl');
+      });
+      await page.evaluate(() => {
+        document.querySelector('iframe[src]')
+          ?.contentDocument?.querySelector('button#generateButtonEl')?.click();
+      });
       if (!silent) console.log('[keyFinder] method 1: tombol diklik, menunggu request...');
 
       let attempts = 0;
@@ -67,22 +72,15 @@ class KeyFinder {
       const page = await context.newPage();
       await page.setDefaultTimeout(30000);
       await page.setDefaultNavigationTimeout(30000);
-
-      let userKey      = null;
       let foundHeaders = null;
 
-      page.on('response', async (res) => {
-        try {
-          if (res.url().includes('/api/verifyUser') && !userKey) {
-            const json = await res.json().catch(() => null);
-            if (json?.userKey) {
-              userKey      = json.userKey;
-              foundHeaders = await res.request().headers();
-              if (!silent) console.log('[keyFinder] method 2: userKey dari verifyUser response');
-            }
-          }
-        } catch (_) {}
-      });
+      const userKey = await page.evaluate(async (t) => {
+        const cached = localStorage.getItem('userKey-' + t);
+        if (cached) return cached;
+        const res  = await fetch('/api/verifyUser?thread=' + t + '&__cacheBust=' + Math.random());
+        const json = await res.json();
+        return json?.userKey || null;
+      }, thread);
 
       await page.goto(embedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
