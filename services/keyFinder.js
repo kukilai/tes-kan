@@ -30,7 +30,7 @@ class KeyFinder {
 
       // networkidle = tunggu semua request selesai (termasuk Turnstile + verifyUser)
       await page.goto('https://image-generation.perchance.org/embed', {
-        waitUntil: 'networkidle',
+        waitUntil: 'networkidle2',
         timeout:   90000,
       });
 
@@ -91,7 +91,7 @@ class KeyFinder {
       });
 
       // networkidle = tunggu Turnstile + verifyUser selesai
-      await page.goto(embedUrl, { waitUntil: 'networkidle', timeout: 90000 });
+      await page.goto(embedUrl, { waitUntil: 'networkidle2', timeout: 90000 });
 
       // Kalau networkidle selesai tapi userKey belum dapat, polling sampai timeout
       const deadline = Date.now() + timeout;
