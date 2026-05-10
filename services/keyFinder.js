@@ -7,11 +7,11 @@ class KeyFinder {
   }
 
   // ─── Method 1 ─────────────────────────────────────────────────────────────
-  // FIX: buka embed URL langsung → klik generate → tangkap userKey dari request
-  // (tidak lagi buka perchance.org + iframe cross-origin)
+  // Buka embed → tunggu Turnstile selesai (auto oleh puppeteer-real-browser)
+  // → userKey muncul di request generate setelah klik
 
   async _method1(silent) {
-    if (!silent) console.log('[keyFinder] method 1: embed + klik generate...');
+    if (!silent) console.log('[keyFinder] method 1: embed + tunggu verify + klik generate...');
 
     return await this.browserService.withBrowserContext(async (context) => {
       const page = await context.newPage();
@@ -24,17 +24,21 @@ class KeyFinder {
         if (match && !foundKey) {
           foundKey     = match[1];
           foundHeaders = await request.headers();
-          if (!silent) console.log('[keyFinder] method 1: key ditemukan');
+          if (!silent) console.log('[keyFinder] method 1: key ditemukan di request');
         }
       });
 
+      // networkidle = tunggu semua request selesai (termasuk Turnstile + verifyUser)
       await page.goto('https://image-generation.perchance.org/embed', {
-        waitUntil: 'domcontentloaded',
-        timeout:   60000,
+        waitUntil: 'networkidle',
+        timeout:   90000,
       });
 
-      // Tombol ada di top-level sekarang — tidak ada iframe, tidak ada cross-origin
-      await page.waitForSelector('button#generateButtonEl', { timeout: 30000 });
+      // Tunggu button muncul dan tidak disabled
+      await page.waitForSelector('button#generateButtonEl:not([disabled])', {
+        timeout: 60000,
+      });
+
       await page.click('button#generateButtonEl');
       if (!silent) console.log('[keyFinder] method 1: tombol diklik, menunggu request...');
 
@@ -58,41 +62,44 @@ class KeyFinder {
   }
 
   // ─── Method 2 ─────────────────────────────────────────────────────────────
-  // FIX: hapus localStorage (SecurityError), langsung fetch verifyUser dari Chrome
+  // Buka embed → intercept response verifyUser (dipanggil otomatis oleh page JS
+  // setelah Turnstile diselesaikan puppeteer-real-browser)
 
-  async _method2(embedUrl = 'https://image-generation.perchance.org/embed', thread = 0, timeout = 60000, silent) {
-    if (!silent) console.log('[keyFinder] method 2: fetch verifyUser dari dalam browser...');
+  async _method2(embedUrl = 'https://image-generation.perchance.org/embed', thread = 0, timeout = 120000, silent) {
+    if (!silent) console.log('[keyFinder] method 2: intercept verifyUser response...');
 
     return await this.browserService.withBrowserContext(async (context) => {
       const page = await context.newPage();
-      await page.setDefaultTimeout(30000);
-      await page.setDefaultNavigationTimeout(30000);
+      await page.setDefaultTimeout(60000);
+      await page.setDefaultNavigationTimeout(90000);
 
+      let userKey      = null;
       let foundHeaders = null;
 
+      // Intercept SEBELUM goto — jangan sampai miss response
       page.on('response', async (res) => {
         try {
-          if (res.url().includes('/api/verifyUser') && !foundHeaders) {
-            foundHeaders = await res.request().headers();
+          if (res.url().includes('/api/verifyUser') && !userKey) {
+            const json = await res.json().catch(() => null);
+            if (json?.userKey) {
+              userKey      = json.userKey;
+              foundHeaders = await res.request().headers().catch(() => ({}));
+              if (!silent) console.log('[keyFinder] method 2: userKey dari verifyUser response');
+            }
           }
         } catch (_) {}
       });
 
-      await page.goto(embedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await new Promise(r => setTimeout(r, 2000));
+      // networkidle = tunggu Turnstile + verifyUser selesai
+      await page.goto(embedUrl, { waitUntil: 'networkidle', timeout: 90000 });
 
-      // FIX: tidak pakai localStorage — langsung fetch dari Chrome
-      const userKey = await page.evaluate(async (t) => {
-        try {
-          const res  = await fetch('/api/verifyUser?thread=' + t + '&__cacheBust=' + Math.random());
-          const json = await res.json();
-          return json?.userKey || null;
-        } catch (_) {
-          return null;
-        }
-      }, thread);
+      // Kalau networkidle selesai tapi userKey belum dapat, polling sampai timeout
+      const deadline = Date.now() + timeout;
+      while (!userKey && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 500));
+      }
 
-      if (!userKey) throw new Error('method 2: verifyUser tidak mengembalikan userKey');
+      if (!userKey) throw new Error(`method 2: timeout — verifyUser tidak mengembalikan userKey setelah ${timeout}ms`);
 
       const cookies      = await page.cookies();
       const cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ');
@@ -131,7 +138,7 @@ class KeyFinder {
     }
   }
 
-  // ─── getData: method 1 → reinit → method 2 ───────────────────────────────
+  // ─── getData ──────────────────────────────────────────────────────────────
 
   async getData(silent = false, forceRefresh = false) {
     if (!forceRefresh && this.cachedData) {
@@ -157,7 +164,7 @@ class KeyFinder {
 
     if (!data) {
       try {
-        data = await this._method2(undefined, 0, 60000, silent);
+        data = await this._method2(undefined, 0, 120000, silent);
       } catch (err) {
         throw new Error(
           `Kedua method gagal.\n  method 1: ${error1}\n  method 2: ${err.message}`
