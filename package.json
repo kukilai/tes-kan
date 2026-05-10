@@ -1,18 +1,19 @@
 {
-  "name": "turnstile-solver-api",
+  "name": "userkey-solver-api",
   "version": "1.0.0",
-  "description": "Cloudflare Turnstile Solver API using puppeteer-real-browser",
+  "description": "User Key Solver API using puppeteer-real-browser",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "docker:build": "docker build -t turnstile-solver .",
-    "docker:run": "docker run -p 3000:3000 turnstile-solver"
+    "docker:build": "docker build -t userkey-solver .",
+    "docker:run": "docker run -p 3000:3000 userkey-solver"
   },
-  "keywords": ["turnstile", "captcha", "cloudflare", "puppeteer", "bypass"],
+  "keywords": ["puppeteer", "bypass"],
   "author": "Xeno",
   "license": "MIT",
   "dependencies": {
+    "axios": "^1.9.0",
     "express": "^5.2.1",
     "puppeteer-real-browser": "^1.4.4"
   },
@@ -22,6 +23,4 @@
   "engines": {
     "node": ">=18.0.0"
   }
-
 }
-
